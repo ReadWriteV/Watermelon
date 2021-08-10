@@ -7,6 +7,7 @@
 #include <random>
 #include <array>
 #include <tuple>
+#include <limits>
 
 #include "config.h"
 
@@ -14,7 +15,7 @@ b2Vec2 gravity(0.0f, -10.0f);
 b2World world(gravity);
 
 std::list<b2Body *> wait_delete;
-std::list<std::tuple<float, float, float>> wait_add;
+std::list<std::tuple<float, float, std::size_t>> wait_add;
 
 bool is_run = false;
 
@@ -25,30 +26,23 @@ class MyContactListener : public b2ContactListener
     virtual void BeginContact(b2Contact *contact) override
     {
 
-        b2CircleShape *A = dynamic_cast<b2CircleShape *>(contact->GetFixtureA()->GetShape());
-        b2CircleShape *B = dynamic_cast<b2CircleShape *>(contact->GetFixtureB()->GetShape());
+        b2Body *A = contact->GetFixtureA()->GetBody();
+        b2Body *B = contact->GetFixtureB()->GetBody();
 
-        if (A != nullptr && B != nullptr && A->m_radius == B->m_radius)
+        if (A->GetUserData().pointer == B->GetUserData().pointer && A->GetUserData().pointer != std::numeric_limits<uintptr_t>::max())
         {
-            auto body_A = contact->GetFixtureA()->GetBody();
-            auto body_B = contact->GetFixtureB()->GetBody();
-            std::size_t index = 0;
-            for (index = 0; index < balls_radius.size(); index++)
-            {
-                if (balls_radius.at(index) == A->m_radius)
-                {
-                    break;
-                }
-            }
-            if (index + 1 == balls_radius.size())
+            auto index = A->GetUserData().pointer;
+            score += static_cast<unsigned int>(index);
+
+            if (index + 2 == balls_radius.size())
             {
                 is_run = false;
+                SDL_Log("win !!!, score = %d", score);
             }
-            score += static_cast<unsigned int>(A->m_radius);
-            wait_delete.push_back(body_A);
-            wait_delete.push_back(body_B);
+            wait_delete.push_back(A);
+            wait_delete.push_back(B);
 
-            wait_add.emplace_back((body_A->GetPosition().x + body_B->GetPosition().x) / 2, (body_A->GetPosition().y + body_B->GetPosition().y) / 2, balls_radius.at(index + 1));
+            wait_add.emplace_back((A->GetPosition().x + B->GetPosition().x) / 2, (A->GetPosition().y + B->GetPosition().y) / 2, index + 1);
         }
         return;
     }
@@ -75,7 +69,7 @@ Uint32 ticks = 0, ticks_used = 0;
 MyContactListener m;
 
 float radius = 0.0f;
-int next = -1;
+std::size_t next = std::numeric_limits<std::size_t>::max();
 
 std::random_device rd;
 std::default_random_engine eng(rd());
@@ -129,12 +123,15 @@ inline void gen_next_ball()
 }
 
 // x, y: world position
-void add_ball(float x, float y, float radius)
+void add_ball(float x, float y, float radius, std::size_t index = std::numeric_limits<uintptr_t>::max())
 {
     b2BodyDef bodyDef;
     bodyDef.type = b2_dynamicBody;
     bodyDef.position.Set(x, y);
-    bodyDef.linearVelocity = b2Vec2(0, -50000.0f);
+    bodyDef.angularDamping = 0.3f;
+    bodyDef.linearDamping = 0.3f;
+    bodyDef.linearVelocity = b2Vec2(0, -100.0f);
+    bodyDef.userData.pointer = index;
     b2Body *body = world.CreateBody(&bodyDef);
 
     b2CircleShape dynamicBox;
@@ -143,7 +140,7 @@ void add_ball(float x, float y, float radius)
     b2FixtureDef fixtureDef;
     fixtureDef.shape = &dynamicBox;
     fixtureDef.density = 3.0f;
-    fixtureDef.friction = 0.6f;
+    fixtureDef.friction = 0.9f;
     fixtureDef.restitution = 0.1f;
 
     body->CreateFixture(&fixtureDef);
@@ -154,6 +151,8 @@ void place_blocks()
     b2BodyDef groundBodyDef;
     b2Body *body;
     b2PolygonShape groundBox;
+
+    groundBodyDef.userData.pointer = std::numeric_limits<uintptr_t>::max();
 
     groundBodyDef.position.Set(left_block_center_x, left_block_center_y);
     body = world.CreateBody(&groundBodyDef);
@@ -187,15 +186,15 @@ void handle_event()
                 // check x
                 if (event.button.x < radius)
                 {
-                    add_ball(radius, height - 100.0f, radius);
+                    add_ball(radius, height - 100.0f, radius, next);
                 }
                 else if (event.button.x > width - right_block_width - radius)
                 {
-                    add_ball(width - radius, height - 100.0f, radius);
+                    add_ball(width - radius, height - 100.0f, radius, next);
                 }
                 else
                 {
-                    add_ball(event.button.x, height - 100.0f, radius);
+                    add_ball(event.button.x, height - 100.0f, radius, next);
                 }
                 gen_next_ball();
             }
@@ -221,7 +220,7 @@ void draw()
     SDL_RenderFillRectF(renderer, &background);
 
     // draw next ball
-    if (next >= 0)
+    if (next != std::numeric_limits<std::size_t>::max())
     {
         SDL_FRect dst{width / 2, 100.0f - radius, 2 * radius, 2 * radius};
         SDL_RenderCopyF(renderer, textures.at(next), nullptr, &dst);
@@ -233,19 +232,12 @@ void draw()
     auto e = world.GetBodyList();
     while (e != nullptr)
     {
-        if (dynamic_cast<b2CircleShape *>(e->GetFixtureList()->GetShape()) != nullptr)
+        if (e->GetUserData().pointer != std::numeric_limits<std::size_t>::max())
         {
+            auto index = e->GetUserData().pointer;
+            auto radius = balls_radius.at(index);
             SDL_FPoint center = CoordinateMapping(e->GetPosition().x, e->GetPosition().y);
-            float radius = static_cast<b2CircleShape *>(e->GetFixtureList()->GetShape())->m_radius;
             SDL_FRect dst{center.x - radius, center.y - radius, 2 * radius, 2 * radius};
-            std::size_t index = 0;
-            for (index = 0; index < balls_radius.size(); index++)
-            {
-                if (balls_radius.at(index) == radius)
-                {
-                    break;
-                }
-            }
             SDL_RenderCopyExF(renderer, textures.at(index), nullptr, &dst, e->GetAngle() * 360.0f / (2 * std::_Pi), nullptr, SDL_FLIP_NONE);
         }
         e = e->GetNext();
@@ -274,9 +266,9 @@ void update_world()
         world.DestroyBody(e);
     }
     wait_delete.clear();
-    for (auto [x, y, r] : wait_add)
+    for (auto [x, y, i] : wait_add)
     {
-        add_ball(x, y, r);
+        add_ball(x, y, balls_radius.at(i), i);
     }
     wait_add.clear();
 }
