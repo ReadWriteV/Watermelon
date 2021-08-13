@@ -8,6 +8,7 @@
 #include <array>
 #include <tuple>
 #include <limits>
+#include <cassert>
 
 #include "config.h"
 
@@ -32,9 +33,9 @@ class MyContactListener : public b2ContactListener
         if (A->GetUserData().pointer == B->GetUserData().pointer && A->GetUserData().pointer != std::numeric_limits<uintptr_t>::max())
         {
             auto index = A->GetUserData().pointer;
-            score += static_cast<unsigned int>(index);
+            score += static_cast<unsigned int>(index + 1);
 
-            if (index + 2 == balls_radius.size())
+            if (index + 2 == fruits_radius.size())
             {
                 is_run = false;
                 SDL_Log("win !!!, score = %d", score);
@@ -65,8 +66,6 @@ class MyContactListener : public b2ContactListener
 SDL_Window *window = nullptr;
 SDL_Renderer *renderer = nullptr;
 Uint32 ticks = 0, ticks_used = 0;
-
-MyContactListener m;
 
 float radius = 0.0f;
 std::size_t next = std::numeric_limits<std::size_t>::max();
@@ -116,20 +115,19 @@ inline SDL_FPoint CoordinateMapping(float x, float y)
     return {x, height - y};
 }
 
-inline void gen_next_ball()
+inline void gen_next_fruit()
 {
     next = distr(eng);
-    radius = balls_radius.at(next);
+    radius = fruits_radius.at(next);
 }
 
 // x, y: world position
-void add_ball(float x, float y, float radius, std::size_t index = std::numeric_limits<uintptr_t>::max())
+void add_fruit(float x, float y, float radius, std::size_t index = std::numeric_limits<uintptr_t>::max())
 {
     b2BodyDef bodyDef;
     bodyDef.type = b2_dynamicBody;
     bodyDef.position.Set(x, y);
-    bodyDef.angularDamping = 0.3f;
-    bodyDef.linearDamping = 0.3f;
+    bodyDef.angularDamping = 0.7f;
     bodyDef.linearVelocity = b2Vec2(0, -100.0f);
     bodyDef.userData.pointer = index;
     b2Body *body = world.CreateBody(&bodyDef);
@@ -186,17 +184,17 @@ void handle_event()
                 // check x
                 if (event.button.x < radius)
                 {
-                    add_ball(radius, height - 100.0f, radius, next);
+                    add_fruit(radius, height - 100.0f, radius, next);
                 }
                 else if (event.button.x > width - right_block_width - radius)
                 {
-                    add_ball(width - radius, height - 100.0f, radius, next);
+                    add_fruit(width - radius, height - 100.0f, radius, next);
                 }
                 else
                 {
-                    add_ball(event.button.x, height - 100.0f, radius, next);
+                    add_fruit(event.button.x, height - 100.0f, radius, next);
                 }
-                gen_next_ball();
+                gen_next_fruit();
             }
             break;
         default:
@@ -219,26 +217,44 @@ void draw()
     SDL_FRect background{0.0f, 0.0f, down_block_width, height - down_block_height};
     SDL_RenderFillRectF(renderer, &background);
 
-    // draw next ball
+    // draw next fruit
     if (next != std::numeric_limits<std::size_t>::max())
     {
-        SDL_FRect dst{width / 2, 100.0f - radius, 2 * radius, 2 * radius};
+        SDL_FRect dst{width / 2 - radius, 100.0f - radius, 2 * radius, 2 * radius};
         SDL_RenderCopyF(renderer, textures.at(next), nullptr, &dst);
     }
 
     // draw score
+    int h = score / 100, m = (score % 100) / 10, l = score % 10;
+    SDL_Rect src;
+    SDL_Rect dst;
+    if (h != 0)
+    {
+        src = {h * 76, 0, 76, 100};
+        dst = {0, 0, score_width, score_height};
+        SDL_RenderCopy(renderer, number, &src, &dst);
+    }
+    if (m != 0 || h != 0)
+    {
+        src = {m * 76, 0, 76, 100};
+        dst = {score_width, 0, score_width, score_height};
+        SDL_RenderCopy(renderer, number, &src, &dst);
+    }
+    src = {l * 76, 0, 76, 100};
+    dst = {score_width * 2, 0, score_width, score_height};
+    SDL_RenderCopy(renderer, number, &src, &dst);
 
-    // draw balls
+    // draw fruits
     auto e = world.GetBodyList();
     while (e != nullptr)
     {
         if (e->GetUserData().pointer != std::numeric_limits<std::size_t>::max())
         {
             auto index = e->GetUserData().pointer;
-            auto radius = balls_radius.at(index);
+            auto radius = fruits_radius.at(index);
             SDL_FPoint center = CoordinateMapping(e->GetPosition().x, e->GetPosition().y);
             SDL_FRect dst{center.x - radius, center.y - radius, 2 * radius, 2 * radius};
-            SDL_RenderCopyExF(renderer, textures.at(index), nullptr, &dst, e->GetAngle() * 360.0f / (2 * std::_Pi), nullptr, SDL_FLIP_NONE);
+            SDL_RenderCopyExF(renderer, textures.at(index), nullptr, &dst, e->GetAngle() * 180.0f / std::_Pi, nullptr, SDL_FLIP_NONE);
         }
         e = e->GetNext();
     }
@@ -250,13 +266,12 @@ void init_texture()
     for (std::size_t i = 0; i < textures.size(); i++)
     {
         textures.at(i) = IMG_LoadTexture(renderer, ("../assets/" + std::to_string(i) + ".png").c_str());
-        if (textures.at(i) == nullptr)
-        {
-            SDL_Log("Error at load texture: %s", SDL_GetError());
-        }
+        assert(textures.at(i) != nullptr);
     }
     ground = IMG_LoadTexture(renderer, "../assets/ground.png");
+    assert(ground != nullptr);
     number = IMG_LoadTexture(renderer, "../assets/number.png");
+    assert(number != nullptr);
 }
 
 void update_world()
@@ -268,7 +283,7 @@ void update_world()
     wait_delete.clear();
     for (auto [x, y, i] : wait_add)
     {
-        add_ball(x, y, balls_radius.at(i), i);
+        add_fruit(x, y, fruits_radius.at(i), i);
     }
     wait_add.clear();
 }
@@ -281,10 +296,11 @@ int main(int argc, char *argv[])
         SDL_Quit();
         return -1;
     }
+    MyContactListener m;
     world.SetContactListener(&m);
     init_texture();
     place_blocks();
-    gen_next_ball();
+    gen_next_fruit();
     while (is_run)
     {
         ticks = SDL_GetTicks();
