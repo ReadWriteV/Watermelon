@@ -1,6 +1,8 @@
 #include "box2d/box2d.h"
+
 #include "SDL.h"
 #include "SDL_image.h"
+#include "SDL_mixer.h"
 
 #include <string>
 #include <list>
@@ -78,9 +80,11 @@ std::array<SDL_Texture *, 11> textures;
 SDL_Texture *ground;
 SDL_Texture *number;
 
+Mix_Music *music;
+
 bool init()
 {
-    if (SDL_Init(SDL_INIT_VIDEO) != 0)
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0)
     {
         SDL_Log("Unable to initialize SDL: %s", SDL_GetError());
         return false;
@@ -89,6 +93,7 @@ bool init()
     if (!window)
     {
         SDL_Log("Failed to create window: %s", SDL_GetError());
+        SDL_Quit();
         return false;
     }
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
@@ -96,6 +101,7 @@ bool init()
     {
         SDL_Log("Failed to create renderer: %s", SDL_GetError());
         SDL_DestroyWindow(window);
+        SDL_Quit();
         return false;
     }
 
@@ -104,6 +110,26 @@ bool init()
         SDL_Log("Unable to set the blend mode: %s", SDL_GetError());
         SDL_DestroyWindow(window);
         SDL_DestroyRenderer(renderer);
+        SDL_Quit();
+        return false;
+    }
+
+    // Audio Init
+    if (Mix_Init(MIX_INIT_MP3) != MIX_INIT_MP3)
+    {
+        SDL_Log("Unable to initialize MIX: %s", Mix_GetError());
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return false;
+    }
+    if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) != 0)
+    {
+        SDL_Log("Unable to initialize Audio: %s", Mix_GetError());
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        Mix_Quit();
+        SDL_Quit();
         return false;
     }
     is_run = true;
@@ -274,8 +300,19 @@ void init_texture()
     assert(number != nullptr);
 }
 
+void init_music()
+{
+    music = Mix_LoadMUS("../assets/combine.mp3");
+    assert(music != nullptr);
+}
+
 void update_world()
 {
+    bool need_play_music = false;
+    if (wait_add.size() != 0)
+    {
+        need_play_music = true;
+    }
     for (auto e : wait_delete)
     {
         world.DestroyBody(e);
@@ -286,6 +323,10 @@ void update_world()
         add_fruit(x, y, fruits_radius.at(i), i);
     }
     wait_add.clear();
+    if (need_play_music)
+    {
+        Mix_PlayMusic(music, 1);
+    }
 }
 
 int main(int argc, char *argv[])
@@ -293,12 +334,15 @@ int main(int argc, char *argv[])
     if (init() == false)
     {
         SDL_Log("Failed to init");
-        SDL_Quit();
         return -1;
     }
+
     MyContactListener m;
     world.SetContactListener(&m);
+
     init_texture();
+    init_music();
+
     place_blocks();
     gen_next_fruit();
     while (is_run)
@@ -327,6 +371,10 @@ int main(int argc, char *argv[])
     }
     SDL_DestroyTexture(ground);
     SDL_DestroyTexture(number);
+
+    Mix_FreeMusic(music);
+    Mix_CloseAudio();
+    Mix_Quit();
 
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);

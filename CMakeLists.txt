@@ -11,6 +11,7 @@ include_directories(include)
 
 find_package(SDL2 2.0.14 REQUIRED CONFIG)
 find_package(SDL2_image 2.0.5 REQUIRED CONFIG)
+find_package(SDL2_mixer 2.0.4 REQUIRED CONFIG)
 find_package(box2d 2.4.1 REQUIRED CONFIG)
 
 add_subdirectory(src)
