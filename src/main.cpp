@@ -10,6 +10,7 @@
 #include <array>
 #include <tuple>
 #include <limits>
+#include <algorithm>
 #include <cassert>
 
 #include "config.h"
@@ -207,19 +208,10 @@ void handle_event()
         case SDL_MOUSEBUTTONDOWN:
             if (event.button.button == SDL_BUTTON_LEFT)
             {
+                float x = event.button.x;
                 // check x
-                if (event.button.x < radius)
-                {
-                    add_fruit(radius, height - 100.0f, radius, next);
-                }
-                else if (event.button.x > width - right_block_width - radius)
-                {
-                    add_fruit(width - radius, height - 100.0f, radius, next);
-                }
-                else
-                {
-                    add_fruit(event.button.x, height - 100.0f, radius, next);
-                }
+                x = std::clamp(x, radius, width - radius);
+                add_fruit(x, height - 100.0f, radius, next);
                 gen_next_fruit();
             }
             break;
