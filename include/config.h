@@ -2,7 +2,7 @@
 
 #include <array>
 
-constexpr float frame_rate{120.0f};
+constexpr float frame_rate{60.0f};
 constexpr float world_rate{30.0f};
 constexpr float time_step{1.0f / world_rate};
 
@@ -31,4 +31,6 @@ constexpr float right_block_center_y = right_block_height / 2;
 constexpr float down_block_center_x = down_block_width / 2;
 constexpr float down_block_center_y = down_block_height / 2;
 
-constexpr int score_width = 38, score_height = 50;
+constexpr float fruit_y = height - 70.0f;
+
+constexpr int red_line_height = fruit_y - fruits_radius.at(4) - 10;

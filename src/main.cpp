@@ -15,8 +15,12 @@
 
 #include "config.h"
 
+#include "scoreboard.h"
+
 b2Vec2 gravity(0.0f, -10.0f);
 b2World world(gravity);
+
+b2Body *last_fruit = nullptr;
 
 std::list<b2Body *> wait_delete;
 std::list<std::tuple<float, float, std::size_t>> wait_add;
@@ -50,11 +54,11 @@ class MyContactListener : public b2ContactListener
         }
         return;
     }
-    virtual void EndContact(b2Contact *contact)
+    virtual void EndContact(b2Contact *contact) override
     {
         B2_NOT_USED(contact);
     }
-    virtual void PreSolve(b2Contact *contact, const b2Manifold *oldManifold)
+    virtual void PreSolve(b2Contact *contact, const b2Manifold *oldManifold) override
     {
         B2_NOT_USED(contact);
         B2_NOT_USED(oldManifold);
@@ -79,7 +83,6 @@ std::uniform_int_distribution<std::size_t> distr(0, 4);
 
 std::array<SDL_Texture *, 11> textures;
 SDL_Texture *ground;
-SDL_Texture *number;
 
 Mix_Music *music;
 
@@ -157,18 +160,18 @@ void add_fruit(float x, float y, float radius, std::size_t index = std::numeric_
     bodyDef.angularDamping = 0.7f;
     bodyDef.linearVelocity = b2Vec2(0, -100.0f);
     bodyDef.userData.pointer = index;
-    b2Body *body = world.CreateBody(&bodyDef);
+    last_fruit = world.CreateBody(&bodyDef);
 
     b2CircleShape dynamicBox;
     dynamicBox.m_radius = radius;
 
     b2FixtureDef fixtureDef;
     fixtureDef.shape = &dynamicBox;
-    fixtureDef.density = 3.0f;
+    fixtureDef.density = 6.0f;
     fixtureDef.friction = 0.9f;
     fixtureDef.restitution = 0.1f;
 
-    body->CreateFixture(&fixtureDef);
+    last_fruit->CreateFixture(&fixtureDef);
 }
 
 void place_blocks()
@@ -208,10 +211,17 @@ void handle_event()
         case SDL_MOUSEBUTTONDOWN:
             if (event.button.button == SDL_BUTTON_LEFT)
             {
+                if (last_fruit != nullptr)
+                {
+                    if (last_fruit->GetPosition().y + fruits_radius.at(last_fruit->GetUserData().pointer) > red_line_height)
+                    {
+                        break;
+                    }
+                }
                 float x = event.button.x;
                 // check x
                 x = std::clamp(x, radius, width - radius);
-                add_fruit(x, height - 100.0f, radius, next);
+                add_fruit(x, fruit_y, radius, next);
                 gen_next_fruit();
             }
             break;
@@ -238,29 +248,13 @@ void draw()
     // draw next fruit
     if (next != std::numeric_limits<std::size_t>::max())
     {
-        SDL_FRect dst{width / 2 - radius, 100.0f - radius, 2 * radius, 2 * radius};
+        SDL_FRect dst{width / 2 - radius, 70.0f - radius, 2 * radius, 2 * radius};
         SDL_RenderCopyF(renderer, textures.at(next), nullptr, &dst);
     }
 
-    // draw score
-    int h = score / 100, m = (score % 100) / 10, l = score % 10;
-    SDL_Rect src;
-    SDL_Rect dst;
-    if (h != 0)
-    {
-        src = {h * 76, 0, 76, 100};
-        dst = {0, 0, score_width, score_height};
-        SDL_RenderCopy(renderer, number, &src, &dst);
-    }
-    if (m != 0 || h != 0)
-    {
-        src = {m * 76, 0, 76, 100};
-        dst = {score_width, 0, score_width, score_height};
-        SDL_RenderCopy(renderer, number, &src, &dst);
-    }
-    src = {l * 76, 0, 76, 100};
-    dst = {score_width * 2, 0, score_width, score_height};
-    SDL_RenderCopy(renderer, number, &src, &dst);
+    // draw red line
+    SDL_SetRenderDrawColor(renderer, 255, 0, 0, SDL_ALPHA_OPAQUE);
+    SDL_RenderDrawLine(renderer, 0, height - red_line_height, width, height - red_line_height);
 
     // draw fruits
     auto e = world.GetBodyList();
@@ -276,7 +270,6 @@ void draw()
         }
         e = e->GetNext();
     }
-    SDL_RenderPresent(renderer);
 }
 
 void init_texture()
@@ -288,8 +281,6 @@ void init_texture()
     }
     ground = IMG_LoadTexture(renderer, "../assets/ground.png");
     assert(ground != nullptr);
-    number = IMG_LoadTexture(renderer, "../assets/number.png");
-    assert(number != nullptr);
 }
 
 void init_music()
@@ -310,7 +301,7 @@ void update_world()
         world.DestroyBody(e);
     }
     wait_delete.clear();
-    for (auto [x, y, i] : wait_add)
+    for (const auto [x, y, i] : wait_add)
     {
         add_fruit(x, y, fruits_radius.at(i), i);
     }
@@ -319,6 +310,21 @@ void update_world()
     {
         Mix_PlayMusic(music, 1);
     }
+}
+
+void check_height()
+{
+    float max_height = 0;
+    auto e = world.GetBodyList();
+    while (e != nullptr)
+    {
+        if (e->GetUserData().pointer != std::numeric_limits<std::size_t>::max() && e->GetLinearVelocity().Length() == 0)
+        {
+            max_height = std::max(max_height, e->GetPosition().y + fruits_radius.at(e->GetUserData().pointer));
+        }
+        e = e->GetNext();
+    }
+    // SDL_Log("%f", max_height);
 }
 
 int main(int argc, char *argv[])
@@ -332,6 +338,8 @@ int main(int argc, char *argv[])
     MyContactListener m;
     world.SetContactListener(&m);
 
+    ScoreBoard score_board(score, renderer);
+
     init_texture();
     init_music();
 
@@ -344,9 +352,18 @@ int main(int argc, char *argv[])
         world.Step(time_step, 6, 2);
 
         update_world();
+
+        score_board.update();
+
+        check_height();
         handle_event();
 
         draw();
+
+        // draw score
+        score_board.draw();
+
+        SDL_RenderPresent(renderer);
 
         if (ticks_used != SDL_GetTicks() - ticks)
         {
@@ -362,7 +379,6 @@ int main(int argc, char *argv[])
         SDL_DestroyTexture(e);
     }
     SDL_DestroyTexture(ground);
-    SDL_DestroyTexture(number);
 
     Mix_FreeMusic(music);
     Mix_CloseAudio();
