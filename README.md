@@ -8,11 +8,9 @@
 
 ``` bash
 
-mkdir build
+cd Watermelon
 
-cd build
-
-cmake ..
+cmake -S . -B build
 
 cmake --build .
 ```
@@ -22,3 +20,5 @@ cmake --build .
 - 开始与结束动画
 
 - 堆叠高度限制
+
+- 水果释放判定优化
