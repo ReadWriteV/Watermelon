@@ -12,7 +12,7 @@ cd Watermelon
 
 cmake -S . -B build
 
-cmake --build .
+cmake --build build
 ```
 
 ## Todo

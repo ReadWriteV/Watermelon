@@ -15,6 +15,7 @@
 
 #include "config.h"
 
+#include "asset_manager.h"
 #include "scoreboard.h"
 
 b2Vec2 gravity(0.0f, -10.0f);
@@ -81,10 +82,7 @@ std::random_device rd;
 std::default_random_engine eng(rd());
 std::uniform_int_distribution<std::size_t> distr(0, 4);
 
-std::array<SDL_Texture *, 11> textures;
-SDL_Texture *ground;
-
-Mix_Music *music;
+AssetManager asset_manager("../assets");
 
 bool init()
 {
@@ -249,7 +247,7 @@ void draw()
     if (next != std::numeric_limits<std::size_t>::max())
     {
         SDL_FRect dst{width / 2 - radius, 70.0f - radius, 2 * radius, 2 * radius};
-        SDL_RenderCopyF(renderer, textures.at(next), nullptr, &dst);
+        SDL_RenderCopyF(renderer, asset_manager.get_fruit_texture(next), nullptr, &dst);
     }
 
     // draw red line
@@ -266,27 +264,10 @@ void draw()
             auto radius = fruits_radius.at(index);
             SDL_FPoint center = CoordinateMapping(e->GetPosition().x, e->GetPosition().y);
             SDL_FRect dst{center.x - radius, center.y - radius, 2 * radius, 2 * radius};
-            SDL_RenderCopyExF(renderer, textures.at(index), nullptr, &dst, e->GetAngle() * 180.0f / std::_Pi, nullptr, SDL_FLIP_NONE);
+            SDL_RenderCopyExF(renderer, asset_manager.get_fruit_texture(index), nullptr, &dst, e->GetAngle() * 180.0f / std::_Pi, nullptr, SDL_FLIP_NONE);
         }
         e = e->GetNext();
     }
-}
-
-void init_texture()
-{
-    for (std::size_t i = 0; i < textures.size(); i++)
-    {
-        textures.at(i) = IMG_LoadTexture(renderer, ("../assets/" + std::to_string(i) + ".png").c_str());
-        assert(textures.at(i) != nullptr);
-    }
-    ground = IMG_LoadTexture(renderer, "../assets/ground.png");
-    assert(ground != nullptr);
-}
-
-void init_music()
-{
-    music = Mix_LoadMUS("../assets/combine.mp3");
-    assert(music != nullptr);
 }
 
 void update_world()
@@ -308,7 +289,7 @@ void update_world()
     wait_add.clear();
     if (need_play_music)
     {
-        Mix_PlayMusic(music, 1);
+        Mix_PlayMusic(asset_manager.get_combine_music(), 1);
     }
 }
 
@@ -318,7 +299,7 @@ void check_height()
     auto e = world.GetBodyList();
     while (e != nullptr)
     {
-        if (e->GetUserData().pointer != std::numeric_limits<std::size_t>::max() && e->GetLinearVelocity().Length() == 0)
+        if (e->GetUserData().pointer != std::numeric_limits<std::size_t>::max() && e->GetLinearVelocity().y == 0)
         {
             max_height = std::max(max_height, e->GetPosition().y + fruits_radius.at(e->GetUserData().pointer));
         }
@@ -338,10 +319,18 @@ int main(int argc, char *argv[])
     MyContactListener m;
     world.SetContactListener(&m);
 
-    ScoreBoard score_board(score, renderer);
+    if (asset_manager.load_assets(renderer) == false)
+    {
+        Mix_CloseAudio();
+        Mix_Quit();
 
-    init_texture();
-    init_music();
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return -1;
+    }
+
+    ScoreBoard score_board(score, renderer, asset_manager);
 
     place_blocks();
     gen_next_fruit();
@@ -374,13 +363,6 @@ int main(int argc, char *argv[])
             ;
     }
 
-    for (auto e : textures)
-    {
-        SDL_DestroyTexture(e);
-    }
-    SDL_DestroyTexture(ground);
-
-    Mix_FreeMusic(music);
     Mix_CloseAudio();
     Mix_Quit();
 

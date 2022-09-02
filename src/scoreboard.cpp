@@ -1,19 +1,15 @@
 #include "scoreboard.h"
 
-#include "SDL_image.h"
 #include <algorithm>
 #include <cassert>
 
-ScoreBoard::ScoreBoard(const unsigned int &score, SDL_Renderer *renderer)
-    : current_score(score), score(score), renderer(renderer)
+ScoreBoard::ScoreBoard(const unsigned int &score, SDL_Renderer *renderer, const AssetManager &asset_manager)
+    : current_score(score), score(score), renderer(renderer), asset_manager(asset_manager)
 {
-    number = IMG_LoadTexture(renderer, "../assets/number.png");
-    assert(number != nullptr);
 }
 
 ScoreBoard::~ScoreBoard()
 {
-    SDL_DestroyTexture(number);
 }
 
 void ScoreBoard::update()
@@ -31,15 +27,15 @@ void ScoreBoard::draw()
     {
         src = {h * 76, 0, 76, 100};
         dst = {0, 0, score_width, score_height};
-        SDL_RenderCopy(renderer, number, &src, &dst);
+        SDL_RenderCopy(renderer, asset_manager.get_numbers_texture(), &src, &dst);
     }
     if (m != 0 || h != 0)
     {
         src = {m * 76, 0, 76, 100};
         dst = {score_width, 0, score_width, score_height};
-        SDL_RenderCopy(renderer, number, &src, &dst);
+        SDL_RenderCopy(renderer, asset_manager.get_numbers_texture(), &src, &dst);
     }
     src = {l * 76, 0, 76, 100};
     dst = {score_width * 2, 0, score_width, score_height};
-    SDL_RenderCopy(renderer, number, &src, &dst);
+    SDL_RenderCopy(renderer, asset_manager.get_numbers_texture(), &src, &dst);
 }
