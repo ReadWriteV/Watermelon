@@ -4,7 +4,19 @@
 
 ![screenshot](./doc/image/screenshot.png)
 
+## Prerequisites
+
++ A C++17 compatible compiler
++ SDL2 (2.26.2)
++ SDL2_image (2.6.2)
++ SDL2_mixer (2.6.2)
++ box2d (2.4.1)
+
+Other version may work with minor modification
+
 ## Build
+
+Run `cmake` in the root directory to compile the sources.
 
 ``` bash
 
@@ -14,11 +26,3 @@ cmake -S . -B build
 
 cmake --build build
 ```
-
-## Todo
-
-- 开始与结束动画
-
-- 堆叠高度限制
-
-- 水果释放判定优化
