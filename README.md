@@ -12,7 +12,7 @@
 + SDL2_mixer (2.6.2)
 + box2d (2.4.1)
 
-Other version may work with minor modification
+Other version may work with minor modification.
 
 ## Build
 
